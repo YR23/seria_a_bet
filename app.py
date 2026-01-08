@@ -143,56 +143,62 @@ if actual_positions:
             value=f"{baruch_score} points"
         )
 
-    # Create detailed table
+    # Create detailed predictions display
     st.markdown("---")
-    st.subheader("📊 Detailed Predictions Table")
-
-    # Create reverse mappings (team -> position predicted)
-    yamdem_reverse = {v: int(k) for k, v in team_mapping['Yamdem'].items()}
-    baruch_reverse = {v: int(k) for k, v in team_mapping['Baruch'].items()}
-
-    # Build table data
-    table_data = []
-    for position in range(1, 9):  # Positions 1-8
-        # Find actual team in this position
-        actual_team = None
-        for team, pos in actual_positions.items():
-            if pos == position:
-                actual_team = team
-                break
-
-        if actual_team:
-            # Yamdem's prediction for this position
-            yamdem_bet_team = team_mapping['Yamdem'].get(str(position), "N/A")
-            yamdem_predicted_pos = yamdem_reverse.get(actual_team, "N/A")
-            yamdem_predicted_pos_str = f"{yamdem_predicted_pos}" if yamdem_predicted_pos != "N/A" else "N/A"
-            # Calculate points based on where they predicted the actual team would finish
-            if yamdem_predicted_pos != "N/A":
-                yamdem_points = calculate_score(yamdem_predicted_pos, position)
-            else:
-                yamdem_points = 0
-
-            # Baruch's prediction for this position
-            baruch_bet_team = team_mapping['Baruch'].get(str(position), "N/A")
-            baruch_predicted_pos = baruch_reverse.get(actual_team, "N/A")
-            baruch_predicted_pos_str = f"{baruch_predicted_pos}" if baruch_predicted_pos != "N/A" else "N/A"
-            # Calculate points based on where they predicted the actual team would finish
-            if baruch_predicted_pos != "N/A":
-                baruch_points = calculate_score(baruch_predicted_pos, position)
-            else:
-                baruch_points = 0
-
-            table_data.append({
-                "Position": position,
-                "Actual Team": actual_team,
-                "Yamdem Bet": yamdem_bet_team,
-                "Yamdem Actual Team Bet": yamdem_predicted_pos_str,
-                "Yamdem Points": yamdem_points,
-                "Baruch Bet": baruch_bet_team,
-                "Baruch Actual Team Bet": baruch_predicted_pos_str,
-                "Baruch Points": baruch_points
-            })
+    st.subheader("📊 Detailed Predictions")
 
     import pandas as pd
-    df = pd.DataFrame(table_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # Function to format status
+    def format_status(predicted_pos, actual_pos):
+        difference = actual_pos - predicted_pos
+
+        if difference == 0:
+            return "✓ EXACT!"
+        elif difference > 0:
+            return f"↓ (actual: {actual_pos}, diff: +{difference})"
+        else:
+            return f"↑ (actual: {actual_pos}, diff: {difference})"
+
+    # Build predictions data for both users
+    def build_predictions_table(user_name):
+        predictions_data = []
+        for predicted_pos in range(1, 9):
+            team_name = team_mapping[user_name].get(str(predicted_pos), "N/A")
+            if team_name != "N/A":
+                actual_pos = actual_positions.get(team_name, None)
+                if actual_pos is not None:
+                    score = calculate_score(predicted_pos, actual_pos)
+                    status = format_status(predicted_pos, actual_pos)
+                    predictions_data.append({
+                        "Position": f"Position {predicted_pos}",
+                        "Team": team_name,
+                        "Result": status,
+                        "Score": score
+                    })
+        return pd.DataFrame(predictions_data)
+
+    # Create two columns for side-by-side display
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown(f"### {yamdem_emoji} Yamdem's Predictions")
+        yamdem_df = build_predictions_table('Yamdem')
+
+        # Apply styling to the dataframe
+        def highlight_exact(row):
+            if "EXACT" in str(row['Result']):
+                return ['background-color: #90EE90'] * len(row)
+            return [''] * len(row)
+
+        styled_yamdem = yamdem_df.style.apply(highlight_exact, axis=1)
+        st.dataframe(styled_yamdem, use_container_width=True, hide_index=True)
+        st.markdown(f"### **TOTAL SCORE: {yamdem_score} points**")
+
+    with col2:
+        st.markdown(f"### {baruch_emoji} Baruch's Predictions")
+        baruch_df = build_predictions_table('Baruch')
+
+        styled_baruch = baruch_df.style.apply(highlight_exact, axis=1)
+        st.dataframe(styled_baruch, use_container_width=True, hide_index=True)
+        st.markdown(f"### **TOTAL SCORE: {baruch_score} points**")
