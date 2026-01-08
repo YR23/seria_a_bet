@@ -103,6 +103,25 @@ def get_upcoming_fixtures():
         st.error(f"Error fetching fixtures: {response.status_code}")
         return []
 
+# Fetch last round results
+def get_last_round_results():
+    fixtures_url = "https://api.football-data.org/v4/competitions/SA/matches"
+    params = {"status": "FINISHED"}
+    response = requests.get(fixtures_url, headers=headers, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        matches = data.get('matches', [])
+
+        # Get the most recent matchday
+        if matches:
+            last_matchday = matches[-1]['season']['currentMatchday']
+            last_round_matches = [m for m in matches if m['matchday'] == last_matchday]
+            return last_round_matches[:10]  # Limit to 10 matches
+        return []
+    else:
+        st.error(f"Error fetching last round results: {response.status_code}")
+        return []
+
 # Calculate scores for all users
 def calculate_all_scores(actual_positions, team_mapping):
     scores = {}
@@ -244,6 +263,43 @@ if actual_positions and full_table:
 
     standings_df = pd.DataFrame(standings_data)
     st.write(standings_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+    # Display last round results
+    st.markdown("---")
+    st.subheader("⚽ Last Round Results")
+
+    last_results = get_last_round_results()
+    if last_results:
+        results_data = []
+        for match in last_results:
+            home_team = match['homeTeam']['shortName']
+            away_team = match['awayTeam']['shortName']
+            home_crest = match['homeTeam']['crest']
+            away_crest = match['awayTeam']['crest']
+            home_score = match['score']['fullTime']['home']
+            away_score = match['score']['fullTime']['away']
+            match_date = match['utcDate']
+
+            # Format date
+            from datetime import datetime
+            dt = datetime.strptime(match_date, "%Y-%m-%dT%H:%M:%SZ")
+            formatted_date = dt.strftime("%b %d")
+
+            # Create team displays with logos
+            home_display = f'<img src="{home_crest}" width="20" height="20" style="vertical-align: middle; margin-right: 5px;"> {home_team}'
+            away_display = f'<img src="{away_crest}" width="20" height="20" style="vertical-align: middle; margin-right: 5px;"> {away_team}'
+
+            results_data.append({
+                "Date": formatted_date,
+                "Home": home_display,
+                "Score": f"{home_score} - {away_score}",
+                "Away": away_display
+            })
+
+        results_df = pd.DataFrame(results_data)
+        st.write(results_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+    else:
+        st.info("No recent results available.")
 
     # Display upcoming fixtures
     st.markdown("---")
