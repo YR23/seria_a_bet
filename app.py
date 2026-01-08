@@ -61,7 +61,6 @@ def calculate_score(predicted_position, actual_position):
         return 0  # Off by more than 2
 
 # Fetch standings
-@st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_standings():
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -79,7 +78,6 @@ def get_standings():
         return None, None
 
 # Load team mappings
-@st.cache_data
 def load_team_mappings():
     with open('team_mapping.json', 'r', encoding='utf-8') as f:
         return json.load(f)
