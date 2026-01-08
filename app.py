@@ -73,10 +73,10 @@ def get_standings():
         for entry in table:
             actual_positions[entry['team']['shortName']] = entry['position']
 
-        return actual_positions
+        return actual_positions, table
     else:
         st.error(f"Error fetching data: {response.status_code}")
-        return None
+        return None, None
 
 # Load team mappings
 @st.cache_data
@@ -107,10 +107,10 @@ def calculate_all_scores(actual_positions, team_mapping):
 st.title("⚽ Serie A Predictions Leaderboard")
 
 # Get data
-actual_positions = get_standings()
+actual_positions, full_table = get_standings()
 team_mapping = load_team_mappings()
 
-if actual_positions:
+if actual_positions and full_table:
     # Calculate scores
     scores = calculate_all_scores(actual_positions, team_mapping)
 
@@ -202,3 +202,20 @@ if actual_positions:
         styled_baruch = baruch_df.style.apply(highlight_exact, axis=1)
         st.dataframe(styled_baruch, use_container_width=True, hide_index=True)
         st.markdown(f"### **TOTAL SCORE: {baruch_score} points**")
+
+    # Display current Serie A standings
+    st.markdown("---")
+    st.subheader("📋 Current Serie A Standings (Top 10)")
+
+    standings_data = []
+    for entry in full_table[:10]:  # Get top 10
+        standings_data.append({
+            "Position": entry['position'],
+            "Team": entry['team']['shortName'],
+            "Games": entry['playedGames'],
+            "Goal Diff": entry['goalDifference'],
+            "Points": entry['points']
+        })
+
+    standings_df = pd.DataFrame(standings_data)
+    st.dataframe(standings_df, use_container_width=True, hide_index=True)
