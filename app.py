@@ -69,18 +69,39 @@ def get_standings():
 
         # Create a dictionary mapping team shortName to actual position
         actual_positions = {}
+        team_crests = {}
         for entry in table:
             actual_positions[entry['team']['shortName']] = entry['position']
+            team_crests[entry['team']['shortName']] = entry['team']['crest']
 
-        return actual_positions, table
+        return actual_positions, table, team_crests
     else:
         st.error(f"Error fetching data: {response.status_code}")
-        return None, None
+        return None, None, None
 
 # Load team mappings
 def load_team_mappings():
     with open('team_mapping.json', 'r', encoding='utf-8') as f:
         return json.load(f)
+
+# Fetch upcoming fixtures
+def get_upcoming_fixtures():
+    fixtures_url = "https://api.football-data.org/v4/competitions/SA/matches"
+    params = {"status": "SCHEDULED"}
+    response = requests.get(fixtures_url, headers=headers, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        matches = data.get('matches', [])
+
+        # Group matches by matchday and get the next matchday
+        if matches:
+            next_matchday = matches[0]['season']['currentMatchday'] + 1
+            next_round_matches = [m for m in matches if m['matchday'] == next_matchday]
+            return next_round_matches[:10]  # Limit to 10 matches
+        return []
+    else:
+        st.error(f"Error fetching fixtures: {response.status_code}")
+        return []
 
 # Calculate scores for all users
 def calculate_all_scores(actual_positions, team_mapping):
@@ -105,7 +126,7 @@ def calculate_all_scores(actual_positions, team_mapping):
 st.title("⚽ Serie A Predictions Leaderboard")
 
 # Get data
-actual_positions, full_table = get_standings()
+actual_positions, full_table, team_crests = get_standings()
 team_mapping = load_team_mappings()
 
 if actual_positions and full_table:
@@ -168,9 +189,12 @@ if actual_positions and full_table:
                 if actual_pos is not None:
                     score = calculate_score(predicted_pos, actual_pos)
                     status = format_status(predicted_pos, actual_pos)
+                    crest = team_crests.get(team_name, "")
+                    # Create team display with logo
+                    team_display = f'<img src="{crest}" width="20" height="20" style="vertical-align: middle; margin-right: 5px;"> {team_name}'
                     predictions_data.append({
                         "Position": f"Position {predicted_pos}",
-                        "Team": team_name,
+                        "Team": team_display,
                         "Result": status,
                         "Score": score
                     })
@@ -190,7 +214,7 @@ if actual_positions and full_table:
             return [''] * len(row)
 
         styled_yamdem = yamdem_df.style.apply(highlight_exact, axis=1)
-        st.dataframe(styled_yamdem, use_container_width=True, hide_index=True)
+        st.write(styled_yamdem.to_html(escape=False), unsafe_allow_html=True)
         st.markdown(f"### **TOTAL SCORE: {yamdem_score} points**")
 
     with col2:
@@ -198,7 +222,7 @@ if actual_positions and full_table:
         baruch_df = build_predictions_table('Baruch')
 
         styled_baruch = baruch_df.style.apply(highlight_exact, axis=1)
-        st.dataframe(styled_baruch, use_container_width=True, hide_index=True)
+        st.write(styled_baruch.to_html(escape=False), unsafe_allow_html=True)
         st.markdown(f"### **TOTAL SCORE: {baruch_score} points**")
 
     # Display current Serie A standings
@@ -207,13 +231,51 @@ if actual_positions and full_table:
 
     standings_data = []
     for entry in full_table[:10]:  # Get top 10
+        crest = entry['team']['crest']
+        team_name = entry['team']['shortName']
+        team_display = f'<img src="{crest}" width="20" height="20" style="vertical-align: middle; margin-right: 5px;"> {team_name}'
         standings_data.append({
             "Position": entry['position'],
-            "Team": entry['team']['shortName'],
+            "Team": team_display,
             "Games": entry['playedGames'],
             "Goal Diff": entry['goalDifference'],
             "Points": entry['points']
         })
 
     standings_df = pd.DataFrame(standings_data)
-    st.dataframe(standings_df, use_container_width=True, hide_index=True)
+    st.write(standings_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+    # Display upcoming fixtures
+    st.markdown("---")
+    st.subheader("📅 Next Round Fixtures")
+
+    fixtures = get_upcoming_fixtures()
+    if fixtures:
+        fixtures_data = []
+        for match in fixtures:
+            home_team = match['homeTeam']['shortName']
+            away_team = match['awayTeam']['shortName']
+            home_crest = match['homeTeam']['crest']
+            away_crest = match['awayTeam']['crest']
+            match_date = match['utcDate']
+
+            # Format date
+            from datetime import datetime
+            dt = datetime.strptime(match_date, "%Y-%m-%dT%H:%M:%SZ")
+            formatted_date = dt.strftime("%b %d, %H:%M")
+
+            # Create team displays with logos
+            home_display = f'<img src="{home_crest}" width="20" height="20" style="vertical-align: middle; margin-right: 5px;"> {home_team}'
+            away_display = f'<img src="{away_crest}" width="20" height="20" style="vertical-align: middle; margin-right: 5px;"> {away_team}'
+
+            fixtures_data.append({
+                "Date & Time": formatted_date,
+                "Home": home_display,
+                "vs": "vs",
+                "Away": away_display
+            })
+
+        fixtures_df = pd.DataFrame(fixtures_data)
+        st.write(fixtures_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+    else:
+        st.info("No upcoming fixtures available.")
